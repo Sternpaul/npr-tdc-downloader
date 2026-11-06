@@ -1,0 +1,6 @@
+# runtime
+mutagen==1.48.1
+sv-ttk==2.6.1
+yt-dlp  # unpinned on purpose: the fallback needs the newest site extractors
+# build
+pyinstaller==6.22.3

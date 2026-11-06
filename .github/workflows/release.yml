@@ -1,0 +1,122 @@
+name: Build & Release
+
+# Push a tag like v1.2.0 -> builds the exe and publishes a GitHub release.
+# Run manually (Actions tab -> "Run workflow") -> builds a test exe as an artifact only.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Work out version
+        id: ver
+        run: |
+          if ("${{ github.ref_type }}" -eq "tag") { $v = "${{ github.ref_name }}".TrimStart("v") }
+          else { $v = "0.0.0-dev+" + "${{ github.sha }}".Substring(0, 7) }
+          "version=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "Version: $v"
+
+      - name: Download FFmpeg (BtbN, LGPL, static) and verify checksum
+        id: ffmpeg
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $repo = "BtbN/FFmpeg-Builds"
+          $assets = (gh release view latest -R $repo --json assets | ConvertFrom-Json).assets
+          # newest stable release branch, e.g. ffmpeg-n8.0-latest-win64-lgpl-8.0.zip
+          $zip = $assets | Where-Object { $_.name -match '^ffmpeg-n[\d.]+-latest-win64-lgpl-[\d.]+\.zip$' } |
+                 Sort-Object { [version]($_.name -replace '^ffmpeg-n([\d.]+)-.*$', '$1') } -Descending |
+                 Select-Object -First 1
+          if (-not $zip) { throw "No matching FFmpeg build found in $repo" }
+          Write-Host "Using $($zip.name)"
+          gh release download latest -R $repo -p $zip.name -p checksums.sha256 -D ffdl
+          $expected = (Select-String -Path ffdl/checksums.sha256 -Pattern ([regex]::Escape($zip.name))).Line.Split(" ")[0]
+          $actual = (Get-FileHash "ffdl/$($zip.name)" -Algorithm SHA256).Hash
+          if ($expected -ne $actual) { throw "Checksum mismatch: expected $expected, got $actual" }
+          Expand-Archive "ffdl/$($zip.name)" -DestinationPath ffdl/x
+          New-Item -ItemType Directory ffmpeg | Out-Null
+          $dir = Get-ChildItem ffdl/x -Directory | Select-Object -First 1
+          Copy-Item "$($dir.FullName)/bin/ffmpeg.exe" ffmpeg/
+          Copy-Item "$($dir.FullName)/LICENSE.txt" ffmpeg/ffmpeg-LICENSE.txt
+          "name=$($zip.name)" >> $env:GITHUB_OUTPUT
+
+      - name: Check FFmpeg can read HTTPS
+        run: |
+          $p = ./ffmpeg/ffmpeg.exe -hide_banner -protocols
+          ./ffmpeg/ffmpeg.exe -hide_banner -version | Select-Object -First 1
+          if (-not ($p -match '^\s*https$')) { throw "This FFmpeg build has no https support" }
+
+      - name: Build exe
+        run: python build.py --version "${{ steps.ver.outputs.version }}" --ffmpeg ffmpeg/ffmpeg.exe
+
+      - name: Smoke test (exe starts and stays up)
+        run: |
+          $p = Start-Process dist/NPR-TDC-Downloader.exe -PassThru
+          Start-Sleep -Seconds 15
+          if ($p.HasExited) { throw "The exe exited right away (code $($p.ExitCode))" }
+          Stop-Process -Id $p.Id -Force
+          Write-Host "OK: window process was running after 15 s"
+
+      - name: Checksum
+        run: |
+          $h = (Get-FileHash dist/NPR-TDC-Downloader.exe -Algorithm SHA256).Hash.ToLower()
+          "$h  NPR-TDC-Downloader.exe" | Out-File -Encoding ascii dist/NPR-TDC-Downloader.exe.sha256
+          Copy-Item ffmpeg/ffmpeg-LICENSE.txt dist/
+          Get-ChildItem dist | Format-Table Name, Length
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: NPR-TDC-Downloader-${{ steps.ver.outputs.version }}
+          path: |
+            dist/NPR-TDC-Downloader.exe
+            dist/NPR-TDC-Downloader.exe.sha256
+            dist/ffmpeg-LICENSE.txt
+
+      - name: Publish GitHub release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: NPR Tiny Desk Downloader ${{ steps.ver.outputs.version }}
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          body: |
+            ## Download
+            **[NPR-TDC-Downloader.exe](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/NPR-TDC-Downloader.exe)** – Windows 10/11, 64-bit. Nothing to install: just double-click it.
+
+            The first time, Windows may show *"Windows protected your PC"* because the app is not code-signed. Click **More info → Run anyway**.
+
+            Bundled FFmpeg: `${{ steps.ffmpeg.outputs.name }}` (LGPL, see `ffmpeg-LICENSE.txt`).
+          files: |
+            dist/NPR-TDC-Downloader.exe
+            dist/NPR-TDC-Downloader.exe.sha256
+            dist/ffmpeg-LICENSE.txt

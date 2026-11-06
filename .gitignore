@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec
+src/_version.py
+ffmpeg/
+downloads/
+*.m4a
+*.mp4
+*.part
