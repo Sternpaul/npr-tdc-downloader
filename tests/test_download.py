@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-import npr_tdc_downloader as m  # noqa: E402
+from tdc import core as m  # noqa: E402
 
 HTML = ('<meta property="og:title" content="Jungle: Tiny Desk Concert">'
         '"embedUrl":"https:\\/\\/cdn.jwplayer.com\\/manifests\\/PlKLO4B7.m3u8"')

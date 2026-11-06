@@ -76,7 +76,7 @@ jobs:
           if (-not ($p -match '^\s*https$')) { throw "This FFmpeg build has no https support" }
 
       - name: Build exe
-        run: python build.py --version "${{ steps.ver.outputs.version }}" --ffmpeg ffmpeg/ffmpeg.exe
+        run: python build.py --version "${{ steps.ver.outputs.version }}" --ffmpeg ffmpeg/ffmpeg.exe --catalogue
 
       - name: Smoke test (exe starts and stays up)
         run: |

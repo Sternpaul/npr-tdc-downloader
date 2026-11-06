@@ -30,25 +30,30 @@ streams **without re-encoding**, so nothing is lost.
 
 ## Features
 
-- **Paste a link, press Download** – that's it.
-- **Audio** (`.m4a`) or **video** (`.mp4`): original quality, or smaller 1080p / 720p versions.
+- **The whole Tiny Desk catalogue built in** – every concert since 2008 (~1,850), searchable
+  by artist or description, filterable by year. Select one or many and click
+  **Download best audio** or **Download best video**; they are queued and saved one after another.
+  New concerts are picked up automatically.
+- **Or paste a link** to any concert page.
+- **Audio** (`.m4a`) or **video** (`.mp4`, always with its audio): original quality, or smaller 1080p / 720p versions.
+- **"Saved" column** shows which concerts you already have; tick *Not saved yet* to hide them.
 - **Tagged files**: artist, title, date, album *NPR Tiny Desk Concerts* and the cover picture
   – they show up nicely in any music player. If tagging fails, the download is still kept.
 - **Progress bar with time left**, cancel at any time (no half-finished files left behind).
 - Skips concerts you already have, checks free disk space before big downloads.
 - Light and dark mode (follows Windows), remembers your format and folder.
 - **Everything is inside one `.exe`** – Python, FFmpeg and all libraries. Nothing to install.
-- Fallback to [yt-dlp](https://github.com/yt-dlp/yt-dlp) for older concert pages without NPR's own player.
+- Works for older concerts too (see [sources by era](#older-concerts)).
 
 ## Download & use
 
 1. Download **`NPR-TDC-Downloader.exe`** from the
    [latest release](https://github.com/Sternpaul/npr-tdc-downloader/releases/latest).
 2. Put it in the folder where your concerts should go (e.g. `Music\Tiny Desk`) and double-click it.
-3. Open a concert on [npr.org/series/tiny-desk-concerts](https://www.npr.org/series/tiny-desk-concerts/),
-   copy the address from the browser, and paste it into the app
-   (if the link is already copied, the app pastes it for you).
-4. Pick the format and click **Download**.
+3. In the **Catalogue** tab, search for an artist (or scroll), select one or more concerts
+   (Ctrl/Shift + click), and click **Download best audio** or **Download best video**.
+4. Or use **Paste a link**: copy a concert's address from your browser – the app pastes it
+   for you – pick a format and click **Download**.
 
 Files are saved next to the `.exe` unless you pick another folder with **Change…**.
 
@@ -92,7 +97,28 @@ NPR-TDC-Downloader.exe "https://www.npr.org/2026/11/02/g-s1-148929/jungle-tiny-d
    `.m4a` / `.mp4` – no re-encoding, so no quality loss.
 4. Writes MP4 tags and cover art with [mutagen](https://github.com/quodlibet/mutagen).
 
-If a page has no JW Player video, the app hands the link to yt-dlp instead.
+### Older concerts
+
+NPR's pages changed over the years, so the app picks the best source a page has:
+
+| Era (roughly, from sampling the archive) | What NPR has | Best audio | Best video |
+|---|---|---|---|
+| 2019 – today, 2009, part of 2008 | JW Player original upload | AAC ~320 kbps (`.m4a`) | original 1080p (`.mp4`) |
+| 2010 – 2017, part of 2008 | NPR's own 720p MP4 | AAC, ~125–320 kbps depending on the concert (`.m4a`) | 720p (`.mp4`) |
+| 2018 | JW Player, mostly without the original upload | AAC from the 1080p version (`.m4a`) | 1080p (`.mp4`) |
+| pages with only an MP3 | MP3 | MP3 as published (`.mp3`) | from YouTube if the page embeds it |
+| pages with only a YouTube embed | YouTube | via [yt-dlp](https://github.com/yt-dlp/yt-dlp) | via yt-dlp |
+
+Audio and video are always copied as-is (no re-encoding), so the result is exactly what NPR stores.
+
+### The catalogue
+
+The list comes from NPR's archive pages
+(`npr.org/series/tiny-desk-concerts/archive?date=MM-DD-YYYY`, 15 concerts per page, newest first).
+A full scan walks every year in parallel (~100 pages, about a minute); release builds ship a
+snapshot of it so the list is there instantly. After that, the app only checks for new
+concerts (at most every 12 hours, or when you click **Refresh**). The catalogue, your settings
+and download history live in `%APPDATA%\NPR Tiny Desk Downloader\`.
 
 ## Build it yourself
 
@@ -104,10 +130,15 @@ cd npr-tdc-downloader
 pip install -r requirements.txt
 python -m unittest discover -s tests       # offline tests
 python src/npr_tdc_downloader.py           # run from source (uses ffmpeg from PATH)
-python build.py --ffmpeg C:\path\to\ffmpeg.exe   # -> dist/NPR-TDC-Downloader.exe
+python build.py --ffmpeg C:\path\to\ffmpeg.exe --catalogue   # -> dist/NPR-TDC-Downloader.exe
 ```
 
 `build.py` looks for `ffmpeg.exe` in `./ffmpeg/` or on `PATH` if `--ffmpeg` is not given.
+`--catalogue` scans NPR's archive and bundles the result (optional; without it the app scans on first start).
+
+Code layout: `src/tdc/core.py` (finding sources, downloading, tagging),
+`src/tdc/catalogue.py` (archive scan), `src/tdc/gui.py` (window and download queue),
+`src/npr_tdc_downloader.py` (entry point).
 The icon is generated by `tools/make_icon.py`.
 
 ## Releases
@@ -121,7 +152,7 @@ git push origin v1.0.0
 
 The workflow runs the tests, downloads the newest stable LGPL FFmpeg build from
 [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds) (checksum-verified),
-builds the exe with version info, checks that it starts, and publishes a release with
+scans the catalogue, builds the exe with version info, checks that it starts, and publishes a release with
 the exe, its SHA-256 checksum and the FFmpeg license. Tags with a `-` (e.g. `v1.1.0-beta.1`)
 become pre-releases. Running the workflow manually builds a test exe as an artifact only.
 

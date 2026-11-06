@@ -1,6 +1,6 @@
 """Build the single-file Windows exe.
 
-    python build.py [--version 1.2.3] [--ffmpeg path\\to\\ffmpeg.exe]
+    python build.py [--version 1.2.3] [--ffmpeg path\\to\\ffmpeg.exe] [--catalogue]
 
 Without --ffmpeg, ffmpeg.exe is taken from ./ffmpeg/ffmpeg.exe or from PATH.
 Output: dist/NPR-TDC-Downloader.exe
@@ -39,6 +39,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--version", default="0.0.0-dev")
     ap.add_argument("--ffmpeg")
+    ap.add_argument("--catalogue", action="store_true",
+                    help="scan NPR's archive and bundle the result (instant catalogue on first start)")
     a = ap.parse_args()
     version = a.version.lstrip("v")
 
@@ -57,6 +59,18 @@ def main():
     vfile = build / "version_info.txt"
     vfile.write_text(VERSION_INFO.format(t=tuple(nums), v=version, n=NAME), encoding="utf-8")
 
+    extra = []
+    if a.catalogue:
+        sys.path.insert(0, str(SRC))
+        from tdc.catalogue import SEED, write_seed
+        seed = build / SEED
+        try:
+            n = write_seed(seed, progress=lambda m: print("  " + m, flush=True))
+            print(f"catalogue snapshot: {n} concerts")
+            extra += ["--add-data", f"{seed};."]
+        except Exception as e:  # never fail the build over this: the app scans on first start
+            print(f"WARNING: catalogue snapshot skipped ({e})")
+
     icon = ROOT / "assets" / "icon.ico"
     cmd = [
         sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onefile", "--windowed",
@@ -68,6 +82,8 @@ def main():
         "--collect-data", "sv_ttk",
         "--collect-submodules", "yt_dlp.extractor",
         "--hidden-import", "mutagen.mp4",
+        "--hidden-import", "mutagen.id3",
+        *extra,
         "--paths", str(SRC),
         "--workpath", str(build / "work"),
         "--specpath", str(build),

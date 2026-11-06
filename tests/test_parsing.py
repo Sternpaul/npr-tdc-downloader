@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-import npr_tdc_downloader as m  # noqa: E402
+from tdc import core as m  # noqa: E402
 
 ITEM = {"sources": [
     {"type": "application/vnd.apple.mpegurl", "file": "x.m3u8"},
@@ -31,6 +31,8 @@ class Parsing(unittest.TestCase):
         html = '{"embedUrl":"https:\\/\\/cdn.jwplayer.com\\/manifests\\/PlKLO4B7.m3u8"}'
         self.assertEqual(m.jw_media_id(html), "PlKLO4B7")
         self.assertIsNone(m.jw_media_id("<html></html>"))
+        old = '"file":"https:\\/\\/content.jwplatform.com\\/manifests\\/CiAJyOrx.m3u8"'
+        self.assertEqual(m.jw_media_id(old), "CiAJyOrx")
 
     def test_page_date(self):
         self.assertEqual(m.page_date('"uploadDate":"2026-11-02T05:00:00-05:00"', ""), "2026-11-02")
