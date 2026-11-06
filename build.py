@@ -46,6 +46,7 @@ def main():
                           else shutil.which("ffmpeg"))
     if not ffmpeg or not Path(ffmpeg).is_file():
         sys.exit("ffmpeg.exe not found: pass --ffmpeg or put it in ./ffmpeg/")
+    ffmpeg = Path(ffmpeg).resolve()  # PyInstaller resolves relative paths from --specpath
     print(f"version {version}\nffmpeg  {ffmpeg}")
 
     build = ROOT / "build"
