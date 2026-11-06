@@ -54,10 +54,8 @@ class App:
         root.after(100, self.poll)
 
         self.render_catalogue()
-        if not self.catalogue.items:
-            self.refresh_catalogue()
-        elif (self.catalogue.age_hours() or 999) > 12:
-            self.refresh_catalogue(quiet=True)
+        # full scan if there is no list yet; otherwise a quick check for new concerts (1-2 pages)
+        self.refresh_catalogue(quiet=bool(self.catalogue.items))
 
         if url:
             self.nb.select(self.link_tab)
@@ -256,7 +254,7 @@ class App:
                     self._catalogue_done(*val)
         except queue.Empty:
             pass
-        self.root.after(100, self.poll)
+        self._poll_id = self.root.after(100, self.poll)
 
     # ------------------------------------------------------------------ catalogue
     def refresh_catalogue(self, quiet=False):
@@ -270,22 +268,26 @@ class App:
 
         def work():
             try:
-                n = self.catalogue.refresh(progress=lambda m: self.q.put(("cat_status", m)))
-                self.q.put(("cat_done", (n, None, quiet)))
+                new = self.catalogue.refresh(progress=lambda m: self.q.put(("cat_status", m)))
+                self.q.put(("cat_done", (new, None, quiet)))
             except Exception as e:
-                self.q.put(("cat_done", (0, e, quiet)))
+                self.q.put(("cat_done", ([], e, quiet)))
 
         threading.Thread(target=work, daemon=True).start()
 
-    def _catalogue_done(self, n, err, quiet):
+    def _catalogue_done(self, new, err, quiet):
         self.cat_busy = False
         self.refresh_btn.configure(state="normal")
+        total = len(self.catalogue.items)
         if err:
-            self.log(f"Could not update the catalogue: {err}")
-        elif n and not quiet:
-            self.log(f"Catalogue updated: {n} new concert{'s' if n != 1 else ''}.")
-        elif n:
-            self.log(f"{n} new concert{'s' if n != 1 else ''} in the catalogue.")
+            self.log(f"Catalogue: could not check for new concerts ({err}).")
+        elif not new:
+            self.log(f"Catalogue checked: no new concerts ({total:,} in total).")
+        else:
+            n = len(new)
+            names = ", ".join(f"{i['artist']} ({i['date']})" for i in new[:8])
+            more = f" and {n - 8} more" if n > 8 else ""
+            self.log(f"Catalogue updated: {n} new concert{'s' if n != 1 else ''} – {names}{more}.")
         self.render_catalogue()
 
     def filtered_items(self):
@@ -331,8 +333,8 @@ class App:
         if not self.cat_busy:
             total = len(self.catalogue.items)
             shown = f"{len(items):,} of {total:,} concerts" if len(items) != total else f"{total:,} concerts"
-            upd = (self.catalogue.updated or "")[:10]
-            self.cat_status.set(shown + (f"  ·  updated {upd}" if upd else ""))
+            upd = (self.catalogue.updated or "")[:16].replace("T", " ")
+            self.cat_status.set(shown + (f"  ·  checked {upd}" if upd else ""))
 
     def sort_by(self, col):
         key, rev = self.sort
@@ -485,4 +487,8 @@ class App:
         self.pending.clear()
         if self.job:
             self.job.cancel()
+        try:
+            self.root.after_cancel(self._poll_id)
+        except Exception:
+            pass
         self.root.destroy()

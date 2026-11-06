@@ -116,9 +116,14 @@ Audio and video are always copied as-is (no re-encoding), so the result is exact
 The list comes from NPR's archive pages
 (`npr.org/series/tiny-desk-concerts/archive?date=MM-DD-YYYY`, 15 concerts per page, newest first).
 A full scan walks every year in parallel (~100 pages, about a minute); release builds ship a
-snapshot of it so the list is there instantly. After that, the app only checks for new
-concerts (at most every 12 hours, or when you click **Refresh**). The catalogue, your settings
-and download history live in `%APPDATA%\NPR Tiny Desk Downloader\`.
+snapshot of it so the list is there instantly. After that, the app checks for new concerts on
+every start and when you click **Refresh** (usually a single page load) and writes the result to
+the log, e.g. *Catalogue updated: 2 new concerts – Fat Joe (2026-11-05), Jungle (2026-11-02).*
+
+The **Saved** column comes from the app's download history: every finished download is recorded
+with its file path, and a concert counts as saved while that file still exists. Files from
+other tools, or ones you moved or renamed, are not recognised. The catalogue, your settings
+and the download history live in `%APPDATA%\NPR Tiny Desk Downloader\`.
 
 ## Build it yourself
 

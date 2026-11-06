@@ -127,7 +127,7 @@ class Catalogue:
             return None
 
     def refresh(self, progress=lambda msg: None):
-        """Full scan the first time, afterwards only fetch new concerts. Returns # new."""
+        """Full scan the first time, afterwards only fetch new concerts. Returns the new items."""
         known = {i["url"]: i for i in self.items}
         if self.complete and known:
             progress("Checking for new concerts …")
@@ -139,7 +139,7 @@ class Catalogue:
         self.items = sort_items(known.values())
         self.updated = datetime.now().isoformat(timespec="seconds")
         core.save_json(CACHE, self.as_dict())
-        return len(new)
+        return sort_items(new.values())
 
     def as_dict(self):
         return {"updated": self.updated, "complete": self.complete, "items": self.items}
