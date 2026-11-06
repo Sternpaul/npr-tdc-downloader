@@ -75,6 +75,7 @@ class App:
             r.iconbitmap(default=os.path.join(BUNDLE_DIR, "icon.ico"))
         except Exception:
             pass
+        self._set_native_icons()
         try:
             import sv_ttk
             sv_ttk.set_theme("dark" if self.dark else "light")
@@ -96,6 +97,39 @@ class App:
         s.configure("Status.TLabel", font=("Segoe UI", 10))
         s.configure("Treeview", rowheight=28, font=("Segoe UI", 10))
         s.configure("Treeview.Heading", font=("Segoe UI Semibold", 10))
+
+    def _set_native_icons(self, big_size=None):
+        """Give Windows the icon at the exact pixel sizes it draws (Tk only hands over
+        a 16 and a 32 px icon, which the taskbar then rescales and blurs)."""
+        if os.name != "nt":
+            return
+        try:
+            import ctypes
+            from ctypes import wintypes
+            u = ctypes.windll.user32
+            u.LoadImageW.restype = wintypes.HANDLE
+            u.LoadImageW.argtypes = [wintypes.HINSTANCE, wintypes.LPCWSTR, wintypes.UINT,
+                                     ctypes.c_int, ctypes.c_int, wintypes.UINT]
+            u.SendMessageW.restype = ctypes.c_ssize_t
+            u.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+            self.root.update_idletasks()
+            hwnd = u.GetParent(self.root.winfo_id()) or self.root.winfo_id()
+            try:
+                dpi = u.GetDpiForWindow(hwnd) or 96
+            except Exception:
+                dpi = 96
+            ico = os.path.join(BUNDLE_DIR, "icon.ico")
+            small = u.GetSystemMetricsForDpi(49, dpi)              # SM_CXSMICON: title bar
+            big = big_size or u.GetSystemMetricsForDpi(11, dpi)    # SM_CXICON: taskbar, Alt+Tab
+            WM_SETICON, IMAGE_ICON, LR_LOADFROMFILE = 0x0080, 1, 0x0010
+            self._icons = []  # keep handles alive for the window's lifetime
+            for which, px in ((0, small), (1, big)):
+                h = u.LoadImageW(None, ico, IMAGE_ICON, px, px, LR_LOADFROMFILE)
+                if h:
+                    self._icons.append(h)
+                    u.SendMessageW(hwnd, WM_SETICON, which, h)
+        except Exception:
+            pass
 
     def _build(self):
         outer = ttk.Frame(self.root, padding=(20, 16, 20, 14))
